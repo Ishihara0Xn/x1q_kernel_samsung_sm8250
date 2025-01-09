@@ -382,7 +382,7 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= $(srctree)/proton-clang/bin/clang
+CC		= $(CROSS_COMPILE)gcc
 LD		= ld.lld
 AR		= llvm-ar
 NM		= llvm-nm
