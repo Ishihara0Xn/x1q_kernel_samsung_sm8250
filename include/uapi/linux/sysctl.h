@@ -30,6 +30,7 @@
 #define NAME_MAX         255       /* # chars in a file name */
 #define PATH_MAX        4096       /* # chars in a path name including nul */
 #define NGROUPS_MAX    65536       /* supplemental group IDs are available */
+#define ARG_MAX       131072       /* # bytes of args + environ for exec() */
 
 #define CTL_MAXNAME 10		/* how many path components do we allow in a
 				   call to sysctl?   In other words, what is
