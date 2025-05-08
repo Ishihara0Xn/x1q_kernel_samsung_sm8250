@@ -330,7 +330,6 @@ void msm_gpio_print_enabled(void)
 	gpiomux_debug_print(NULL);
 }
 
-#if IS_ENABLED(CONFIG_DEBUG_FS)
 static int gpiomux_debug_showall(struct seq_file *m, void *unused)
 {
 	gpiomux_debug_print(m);
@@ -356,7 +355,6 @@ static int __init msm_gpiomux_debug_init(void)
 	return 0;
 }
 late_initcall(msm_gpiomux_debug_init);
-#endif /* CONFIG_DEBUG_FS */
 
 static int __init msm_gpiomux_init(void)
 {

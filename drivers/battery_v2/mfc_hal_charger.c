@@ -35,8 +35,6 @@
 #include <linux/vmalloc.h>
 #include <linux/ctype.h>
 
-#define SENDSZ 16
-
 unsigned int mfc_chip_id_now;
 
 int mfc_reg_read(struct i2c_client *client, u16 reg, u8 *val)
@@ -98,25 +96,26 @@ int mfc_reg_multi_write(struct i2c_client *client, u16 reg, const u8 * val, int 
 {
 	struct mfc_charger_data *charger = i2c_get_clientdata(client);
 	int ret = 0;
-	unsigned char data[SENDSZ+2];
+	const int sendsz = 16;
+	unsigned char data[sendsz+2];
 	int cnt = 0;
 
 	pr_err("%s: size: 0x%x\n",
 				__func__, size);
-	while(size > SENDSZ) {
+	while(size > sendsz) {
 		data[0] = (reg+cnt) >>8;
 		data[1] = (reg+cnt) & 0xff;
-		memcpy(data+2, val+cnt, SENDSZ);
+		memcpy(data+2, val+cnt, sendsz);
 		mutex_lock(&charger->io_lock);
-		ret = i2c_master_send(client, data, SENDSZ+2);
+		ret = i2c_master_send(client, data, sendsz+2);
 		mutex_unlock(&charger->io_lock);
-		if (ret < SENDSZ+2) {
+		if (ret < sendsz+2) {
 			pr_err("%s: i2c write error, reg: 0x%x\n",
 					__func__, reg);
 			return ret < 0 ? ret : -EIO;
 		}
-		cnt = cnt + SENDSZ;
-		size = size - SENDSZ;
+		cnt = cnt + sendsz;
+		size = size - sendsz;
 	}
 	if (size > 0) {
 		data[0] = (reg+cnt) >>8;

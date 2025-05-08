@@ -86,14 +86,8 @@ nsim_bpf_verify_insn(struct bpf_verifier_env *env, int insn_idx, int prev_insn)
 	return 0;
 }
 
-static int nsim_bpf_finalize(struct bpf_verifier_env *env)
-{
-	return 0;
-}
-
-static const struct bpf_prog_offload_ops nsim_bpf_dev_ops = {
-	.insn_hook	= nsim_bpf_verify_insn,
-	.finalize	= nsim_bpf_finalize,
+static const struct bpf_prog_offload_ops nsim_bpf_analyzer_ops = {
+	.insn_hook = nsim_bpf_verify_insn,
 };
 
 static bool nsim_xdp_offload_active(struct netdevsim *ns)
@@ -336,12 +330,10 @@ nsim_map_alloc_elem(struct bpf_offloaded_map *offmap, unsigned int idx)
 {
 	struct nsim_bpf_bound_map *nmap = offmap->dev_priv;
 
-	nmap->entry[idx].key = kmalloc(offmap->map.key_size,
-				       GFP_KERNEL_ACCOUNT | __GFP_NOWARN);
+	nmap->entry[idx].key = kmalloc(offmap->map.key_size, GFP_USER);
 	if (!nmap->entry[idx].key)
 		return -ENOMEM;
-	nmap->entry[idx].value = kmalloc(offmap->map.value_size,
-					 GFP_KERNEL_ACCOUNT | __GFP_NOWARN);
+	nmap->entry[idx].value = kmalloc(offmap->map.value_size, GFP_USER);
 	if (!nmap->entry[idx].value) {
 		kfree(nmap->entry[idx].key);
 		nmap->entry[idx].key = NULL;
@@ -483,7 +475,7 @@ nsim_bpf_map_alloc(struct netdevsim *ns, struct bpf_offloaded_map *offmap)
 	if (offmap->map.map_flags)
 		return -EINVAL;
 
-	nmap = kzalloc(sizeof(*nmap), GFP_KERNEL_ACCOUNT);
+	nmap = kzalloc(sizeof(*nmap), GFP_USER);
 	if (!nmap)
 		return -ENOMEM;
 
@@ -501,7 +493,6 @@ nsim_bpf_map_alloc(struct netdevsim *ns, struct bpf_offloaded_map *offmap)
 				goto err_free;
 			key = nmap->entry[i].key;
 			*key = i;
-			memset(nmap->entry[i].value, 0, offmap->map.value_size);
 		}
 	}
 
@@ -550,7 +541,7 @@ int nsim_bpf(struct net_device *dev, struct netdev_bpf *bpf)
 		if (err)
 			return err;
 
-		bpf->verifier.ops = &nsim_bpf_dev_ops;
+		bpf->verifier.ops = &nsim_bpf_analyzer_ops;
 		return 0;
 	case BPF_OFFLOAD_TRANSLATE:
 		state = bpf->offload.prog->aux->offload->dev_priv;
@@ -602,7 +593,7 @@ int nsim_bpf_init(struct netdevsim *ns)
 		if (IS_ERR_OR_NULL(ns->sdev->ddir_bpf_bound_progs))
 			return -ENOMEM;
 
-		ns->sdev->bpf_dev = bpf_offload_dev_create(&nsim_bpf_dev_ops);
+		ns->sdev->bpf_dev = bpf_offload_dev_create();
 		err = PTR_ERR_OR_ZERO(ns->sdev->bpf_dev);
 		if (err)
 			return err;
