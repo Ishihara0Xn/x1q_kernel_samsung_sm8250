@@ -1360,7 +1360,7 @@ static int aux_output_begin(struct perf_output_handle *handle,
 	unsigned long head, base, offset;
 	struct hws_trailer_entry *te;
 
-	if (handle->head & ~PAGE_MASK)
+	if (WARN_ON_ONCE(handle->head & ~PAGE_MASK))
 		return -EINVAL;
 
 	aux->head = handle->head >> PAGE_SHIFT;
@@ -1377,8 +1377,8 @@ static int aux_output_begin(struct perf_output_handle *handle,
 		idx = aux->empty_mark + 1;
 		for (i = 0; i < range_scan; i++, idx++) {
 			te = aux_sdb_trailer(aux, idx);
-			te->flags &= ~(SDB_TE_BUFFER_FULL_MASK |
-				       SDB_TE_ALERT_REQ_MASK);
+			te->flags = te->flags & ~SDB_TE_BUFFER_FULL_MASK;
+			te->flags = te->flags & ~SDB_TE_ALERT_REQ_MASK;
 			te->overflow = 0;
 		}
 		/* Save the position of empty SDBs */
@@ -1425,7 +1425,8 @@ static bool aux_set_alert(struct aux_buffer *aux, unsigned long alert_index,
 	te = aux_sdb_trailer(aux, alert_index);
 	do {
 		orig_flags = te->flags;
-		*overflow = orig_overflow = te->overflow;
+		orig_overflow = te->overflow;
+		*overflow = orig_overflow;
 		if (orig_flags & SDB_TE_BUFFER_FULL_MASK) {
 			/*
 			 * SDB is already set by hardware.
@@ -1528,7 +1529,7 @@ static void hw_collect_aux(struct cpu_hw_sf *cpuhw)
 	unsigned long num_sdb;
 
 	aux = perf_get_aux(handle);
-	if (!aux)
+	if (WARN_ON_ONCE(!aux))
 		return;
 
 	/* Inform user space new data arrived */
@@ -1536,7 +1537,6 @@ static void hw_collect_aux(struct cpu_hw_sf *cpuhw)
 	perf_aux_output_end(handle, size);
 	num_sdb = aux->sfb.num_sdb;
 
-	num_sdb = aux->sfb.num_sdb;
 	while (!done) {
 		/* Get an output handle */
 		aux = perf_aux_output_begin(handle, cpuhw->event);
@@ -1547,7 +1547,7 @@ static void hw_collect_aux(struct cpu_hw_sf *cpuhw)
 			debug_sprintf_event(sfdbg, 1, "AUX buffer used up\n");
 			break;
 		}
-		if (!aux)
+		if (WARN_ON_ONCE(!aux))
 			return;
 
 		/* Update head and alert_mark to new position */
@@ -1659,7 +1659,7 @@ static void *aux_buffer_setup(struct perf_event *event, void **pages,
 	}
 
 	/* Allocate aux_buffer struct for the event */
-	aux = kzalloc(sizeof(struct aux_buffer), GFP_KERNEL);
+	aux = kmalloc(sizeof(struct aux_buffer), GFP_KERNEL);
 	if (!aux)
 		goto no_aux;
 	sfb = &aux->sfb;
@@ -1746,8 +1746,12 @@ static void cpumsf_pmu_start(struct perf_event *event, int flags)
 {
 	struct cpu_hw_sf *cpuhw = this_cpu_ptr(&cpu_hw_sf);
 
-	if (!(event->hw.state & PERF_HES_STOPPED))
+	if (WARN_ON_ONCE(!(event->hw.state & PERF_HES_STOPPED)))
 		return;
+
+	if (flags & PERF_EF_RELOAD)
+		WARN_ON_ONCE(!(event->hw.state & PERF_HES_UPTODATE));
+
 	perf_pmu_disable(event->pmu);
 	event->hw.state = 0;
 	cpuhw->lsctl.cs = 1;
@@ -2093,4 +2097,4 @@ out:
 	return err;
 }
 arch_initcall(init_cpum_sampling_pmu);
-core_param(cpum_sfb_size, CPUM_SF_MAX_SDB, sfb_size, 0644);
+core_param(cpum_sfb_size, CPUM_SF_MAX_SDB, sfb_size, 0640);
