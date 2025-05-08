@@ -20,11 +20,13 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
+#include <uapi/linux/limits.h>
 #include "stm.h"
 
 #include <uapi/linux/stm.h>
 
 static unsigned int stm_core_up;
+#define PATH_MAX        4096       /* # chars in a path name including nul */
 
 /*
  * The SRCU here makes sure that STM device doesn't disappear from under a

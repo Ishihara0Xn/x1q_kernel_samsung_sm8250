@@ -27,6 +27,7 @@
 
 #include "slab.h"
 
+#define NAME_MAX         255       /* # chars in a file name */
 enum slab_state slab_state;
 LIST_HEAD(slab_caches);
 DEFINE_MUTEX(slab_mutex);

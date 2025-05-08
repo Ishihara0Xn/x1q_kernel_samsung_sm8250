@@ -23,6 +23,9 @@
 #include <linux/list.h>
 #include <linux/dcache.h>
 
+#define NAME_MAX         255       /* # chars in a file name */
+#define PATH_MAX        4096       /* # chars in a path name including nul */
+
 struct linux_binprm;
 struct task_integrity;
 

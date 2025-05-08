@@ -12,6 +12,7 @@
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 
+#define NGROUPS_MAX    65536       /* supplemental group IDs are available */
 struct group_info *groups_alloc(int gidsetsize)
 {
 	struct group_info *gi;

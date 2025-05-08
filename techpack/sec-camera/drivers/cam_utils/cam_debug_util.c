@@ -5,6 +5,7 @@
 
 #include <linux/io.h>
 #include <linux/module.h>
+#include <uapi/linux/limits.h>
 
 #include "cam_debug_util.h"
 

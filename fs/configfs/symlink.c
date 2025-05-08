@@ -28,12 +28,15 @@
 #include <linux/module.h>
 #include <linux/namei.h>
 #include <linux/slab.h>
+#include <uapi/linux/limits.h>
 
 #include <linux/configfs.h>
 #include "configfs_internal.h"
 
 /* Protects attachments of new symlinks */
 DEFINE_MUTEX(configfs_symlink_mutex);
+#define NAME_MAX         255       /* # chars in a file name */
+#define PATH_MAX        4096       /* # chars in a path name including nul */
 
 static int item_depth(struct config_item * item)
 {

@@ -26,6 +26,9 @@
 #include <linux/err.h>
 #include <linux/of.h>
 
+#define NAME_MAX         255       /* # chars in a file name */
+#define PATH_MAX        4096       /* # chars in a path name including nul */
+#define NGROUPS_MAX    65536       /* supplemental group IDs are available */
 #define IOMMU_READ	(1 << 0)
 #define IOMMU_WRITE	(1 << 1)
 #define IOMMU_CACHE	(1 << 2) /* DMA cache coherency */

@@ -10,6 +10,10 @@
 #include <linux/types.h>
 #include <linux/posix_types.h>
 
+#define NGROUPS_MAX    65536       /* supplemental group IDs are available */
+#define PATH_MAX        4096       /* # chars in a path name including nul */
+#define NAME_MAX         255       /* # chars in a file name */
+
 struct file;
 
 extern void fput(struct file *);

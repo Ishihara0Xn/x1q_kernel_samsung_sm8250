@@ -26,6 +26,8 @@
 #include "five_dsms.h"
 #include "five_testing.h"
 
+#define NAME_MAX         255       /* # chars in a file name */
+
 __visible_for_testing __mockable
 void five_audit_msg(struct task_struct *task, struct file *file,
 		const char *op, enum task_integrity_value prev,

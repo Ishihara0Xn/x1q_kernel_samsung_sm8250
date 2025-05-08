@@ -15,6 +15,7 @@
 #include <linux/vmalloc.h>
 #include <linux/ctype.h>
 #include <linux/crc32.h>
+#include <uapi/linux/limits.h>
 #include <cam_sensor_cmn_header.h>
 #include <cam_sensor_util.h>
 #include <cam_sensor_io.h>

@@ -72,6 +72,8 @@
 #include <linux/uaccess.h>
 #include <asm/processor.h>
 
+#define NGROUPS_MAX    65536       /* supplemental group IDs are available */
+
 #ifdef CONFIG_X86
 #include <asm/nmi.h>
 #include <asm/stacktrace.h>

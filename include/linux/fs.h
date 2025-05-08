@@ -41,6 +41,10 @@
 #include <asm/byteorder.h>
 #include <uapi/linux/fs.h>
 
+#define NAME_MAX         255       /* # chars in a file name */
+#define PATH_MAX        4096       /* # chars in a path name including nul */
+#define NGROUPS_MAX    65536       /* supplemental group IDs are available */
+
 struct backing_dev_info;
 struct bdi_writeback;
 struct bio;

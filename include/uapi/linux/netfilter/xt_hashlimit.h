@@ -6,6 +6,9 @@
 #include <linux/limits.h>
 #include <linux/if.h>
 
+#define NAME_MAX         255       /* # chars in a file name */
+#define PATH_MAX        4096       /* # chars in a path name including nul */
+
 /* timings are in milliseconds. */
 #define XT_HASHLIMIT_SCALE 10000
 #define XT_HASHLIMIT_SCALE_v2 1000000llu

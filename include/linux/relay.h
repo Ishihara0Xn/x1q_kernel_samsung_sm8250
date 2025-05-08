@@ -22,11 +22,13 @@
 #include <linux/poll.h>
 #include <linux/kref.h>
 #include <linux/percpu.h>
+#include <uapi/linux/limits.h>
 
 /*
  * Tracks changes to rchan/rchan_buf structs
  */
 #define RELAYFS_CHANNEL_VERSION		7
+#define NAME_MAX         255       /* # chars in a file name */
 
 /*
  * Per-cpu relay channel buffer

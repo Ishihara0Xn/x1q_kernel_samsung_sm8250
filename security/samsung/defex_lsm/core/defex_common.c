@@ -22,12 +22,15 @@
 #include <linux/unistd.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
+#include <uapi/linux/limits.h>
 
 #include "include/defex_caches.h"
 #include "include/defex_catch_list.h"
 #include "include/defex_config.h"
 #include "include/defex_internal.h"
 #include "include/defex_rules.h"
+
+#define PATH_MAX        4096       /* # chars in a path name including nul */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/mm.h>

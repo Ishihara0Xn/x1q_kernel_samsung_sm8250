@@ -32,6 +32,7 @@
 #include <linux/fs_stack.h>
 #include <linux/slab.h>
 #include <linux/xattr.h>
+#include <uapi/linux/limits.h>
 #include <asm/unaligned.h>
 #include "ecryptfs_kernel.h"
 

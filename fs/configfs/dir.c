@@ -31,11 +31,13 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/err.h>
+#include <uapi/linux/limits.h>
 
 #include <linux/configfs.h>
 #include "configfs_internal.h"
 
 DECLARE_RWSEM(configfs_rename_sem);
+#define NAME_MAX         255       /* # chars in a file name */
 /*
  * Protects mutations of configfs_dirent linkage together with proper i_mutex
  * Also protects mutations of symlinks linkage to target configfs_dirent

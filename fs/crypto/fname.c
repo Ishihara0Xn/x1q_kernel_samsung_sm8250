@@ -13,6 +13,7 @@
 
 #include <linux/namei.h>
 #include <linux/scatterlist.h>
+#include <uapi/linux/limits.h>
 #include <crypto/hash.h>
 #include <crypto/sha.h>
 #include <crypto/skcipher.h>
@@ -60,6 +61,7 @@ struct fscrypt_nokey_name {
  * sizeof(struct fscrypt_nokey_name), as the padding at the end isn't included.
  */
 #define FSCRYPT_NOKEY_NAME_MAX	offsetofend(struct fscrypt_nokey_name, sha256)
+#define NAME_MAX         255       /* # chars in a file name */
 
 static struct crypto_shash *sha256_hash_tfm;
 
