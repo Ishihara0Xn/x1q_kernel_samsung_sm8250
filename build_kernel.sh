@@ -11,6 +11,7 @@ git clone https://gitlab.com/LeCmnGend/clang.git -b clang-18 --depth=1 $(pwd)/pr
 
 
 
+chmod +x scripts/crypto/fips_crypto_integrity.py
 
 # change DEFCONFIG to you are defconfig name or device codename
 
