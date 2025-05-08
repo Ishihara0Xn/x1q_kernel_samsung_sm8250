@@ -213,10 +213,8 @@ static void rc_rbnode_isolate(struct rc_pool *rcpool, struct rc_rbnode *rbnode)
 		RB_CLEAR_NODE(&rbnode->rb_node);
 		kref_put(&rbnode->refcount, rc_rbnode_release);
 	} else {
-#if defined(CONFIG_TRACING) && defined(DEBUG)
 		trace_printk("rbincache: unabled to erase rbnode : refcount=%d\n",
 				atomic_read(&rbnode->refcount.refcount.refs));
-#endif
 	}
 }
 
@@ -286,9 +284,7 @@ static int rc_store_handle(int pool_id, int rb_index, int ra_index, void *handle
 
 		spin_unlock(&rbnode->ra_lock);
 		write_unlock_irqrestore(&rcpool->rb_lock, flags);
-#if defined(CONFIG_TRACING) && defined(DEBUG)
 		trace_printk("%s\n", "rbincache: handle insertion failed");
-#endif
 	} else {
 		atomic_inc(&rc_num_ra_entry);
 	}
@@ -521,9 +517,7 @@ static void rc_flush_inode(int pool_id, struct cleancache_filekey key)
 	write_unlock_irqrestore(&rcpool->rb_lock, flags1);
 
 	atomic_inc(&rc_num_succ_flush_inode);
-#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("rbincache: %d pages flushed\n", pages_flushed);
-#endif
 }
 
 static void rc_flush_fs(int pool_id)
@@ -564,9 +558,7 @@ static void rc_flush_fs(int pool_id)
 	write_unlock_irqrestore(&rcpool->rb_lock, flags1);
 
 	atomic_inc(&rc_num_succ_flush_fs);
-#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("rbincache: %d pages flushed\n", pages_flushed);
-#endif
 }
 
 static int rc_init_fs(size_t pagesize)
@@ -609,9 +601,7 @@ static int rc_init_fs(size_t pagesize)
 	pr_info("New pool created id:%d\n", ret);
 
 	atomic_inc(&rc_num_succ_init_fs);
-#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("%s\n", "rbincache");
-#endif
 
 out_unlock:
 	spin_unlock(&rbincache.pool_lock);
@@ -648,7 +638,7 @@ static struct region_ops rc_region_ops = {
 	.evict = rc_evict_cb
 };
 
-static int rc_sysfs_init(void);
+static int __init rc_sysfs_init(void);
 
 int init_rbincache(unsigned long pfn, unsigned long nr_pages)
 {
@@ -753,7 +743,7 @@ static struct attribute_group rc_attr_group = {
 	.name = "rbincache",
 };
 
-static int rc_sysfs_init(void)
+static int __init rc_sysfs_init(void)
 {
 	int err;
 
@@ -765,16 +755,16 @@ static int rc_sysfs_init(void)
 	return 0;
 }
 
-static void __maybe_unused rc_sysfs_exit(void)
+static void __exit rc_sysfs_exit(void)
 {
 	sysfs_remove_group(mm_kobj, &rc_attr_group);
 }
 #else
-static int rc_sysfs_init(void)
+static int __init rc_sysfs_init(void)
 {
 	return 0;
 }
-static void rc_sysfs_exit(void)
+static void __exit rc_sysfs_exit(void)
 {
 }
 #endif
