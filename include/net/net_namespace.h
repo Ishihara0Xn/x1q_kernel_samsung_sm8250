@@ -20,7 +20,7 @@
 #include <net/netns/ipv4.h>
 #include <net/netns/ipv6.h>
 #ifdef CONFIG_MPTCP
-#include <net/netns/mptcp.h>
+	#include <net/netns/mptcp.h>
 #endif
 #include <net/netns/ieee802154_6lowpan.h>
 #include <net/netns/sctp.h>
@@ -46,7 +46,6 @@ struct ctl_table_header;
 struct net_generic;
 struct uevent_sock;
 struct netns_ipvs;
-struct bpf_prog;
 
 
 #define NETDEV_HASHBITS    8
@@ -151,8 +150,6 @@ struct net {
 #endif
 	struct net_generic __rcu	*gen;
 
-	struct bpf_prog __rcu	*flow_dissector_prog;
-
 	/* Note : following structs are cache line aligned */
 #ifdef CONFIG_XFRM
 	struct netns_xfrm	xfrm;
@@ -182,8 +179,6 @@ struct net *copy_net_ns(unsigned long flags, struct user_namespace *user_ns,
 void net_ns_get_ownership(const struct net *net, kuid_t *uid, kgid_t *gid);
 
 void net_ns_barrier(void);
-
-struct ns_common *get_net_ns(struct ns_common *ns);
 #else /* CONFIG_NET_NS */
 #include <linux/sched.h>
 #include <linux/nsproxy.h>
@@ -203,11 +198,6 @@ static inline void net_ns_get_ownership(const struct net *net,
 }
 
 static inline void net_ns_barrier(void) {}
-
-static inline struct ns_common *get_net_ns(struct ns_common *ns)
-{
-	return ERR_PTR(-EINVAL);
-}
 #endif /* CONFIG_NET_NS */
 
 
@@ -360,13 +350,8 @@ struct pernet_operations {
 	 * synchronize_rcu() related to these pernet_operations,
 	 * instead of separate synchronize_rcu() for every net.
 	 * Please, avoid synchronize_rcu() at all, where it's possible.
-	 *
-	 * Note that a combination of pre_exit() and exit() can
-	 * be used, since a synchronize_rcu() is guaranteed between
-	 * the calls.
 	 */
 	int (*init)(struct net *net);
-	void (*pre_exit)(struct net *net);
 	void (*exit)(struct net *net);
 	void (*exit_batch)(struct list_head *net_exit_list);
 	unsigned int *id;

@@ -50,8 +50,6 @@ struct flow_dissector_key_vlan {
 	u16	vlan_id:12,
 		vlan_priority:3;
 	__be16	vlan_tpid;
-	__be16	vlan_eth_type;
-	u16	padding;
 };
 
 struct flow_dissector_key_mpls {
@@ -316,12 +314,5 @@ flow_dissector_init_keys(struct flow_dissector_key_control *key_control,
 	memset(key_control, 0, sizeof(*key_control));
 	memset(key_basic, 0, sizeof(*key_basic));
 }
-
-struct bpf_flow_dissector {
-	struct bpf_flow_keys	*flow_keys;
-	const struct sk_buff	*skb;
-	void			*data;
-	void			*data_end;
-};
 
 #endif

@@ -168,7 +168,6 @@ struct regulator_ops {
 	int (*set_current_limit) (struct regulator_dev *,
 				 int min_uA, int max_uA);
 	int (*get_current_limit) (struct regulator_dev *);
-
 #ifdef CONFIG_SEC_PM
 	int (*set_short_detection)(struct regulator_dev *,
 				   bool enable, int lv_uA);
