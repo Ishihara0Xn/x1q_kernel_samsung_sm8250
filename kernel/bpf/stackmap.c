@@ -63,8 +63,7 @@ static inline int stack_map_data_size(struct bpf_map *map)
 
 static int prealloc_elems_and_freelist(struct bpf_stack_map *smap)
 {
-	u64 elem_size = sizeof(struct stack_map_bucket) +
-			(u64)smap->map.value_size;
+	u32 elem_size = sizeof(struct stack_map_bucket) + smap->map.value_size;
 	int err;
 
 	smap->elems = bpf_map_area_alloc(elem_size * smap->map.max_entries,
@@ -113,12 +112,7 @@ static struct bpf_map *stack_map_alloc(union bpf_attr *attr)
 	} else if (value_size / 8 > sysctl_perf_event_max_stack)
 		return ERR_PTR(-EINVAL);
 
-	/* hash table size must be power of 2; roundup_pow_of_two() can overflow
-	 * into UB on 32-bit arches, so check that first
-	 */
-	if (attr->max_entries > 1UL << 31)
-		return ERR_PTR(-E2BIG);
-
+	/* hash table size must be power of 2 */
 	n_buckets = roundup_pow_of_two(attr->max_entries);
 
 	cost = n_buckets * sizeof(struct stack_map_bucket *) + sizeof(*smap);
@@ -524,7 +518,7 @@ const struct bpf_func_proto bpf_get_stack_proto = {
 /* Called from eBPF program */
 static void *stack_map_lookup_elem(struct bpf_map *map, void *key)
 {
-	return ERR_PTR(-EOPNOTSUPP);
+	return NULL;
 }
 
 /* Called from syscall */
@@ -619,7 +613,7 @@ static void stack_map_free(struct bpf_map *map)
 	put_callchain_buffers();
 }
 
-const struct bpf_map_ops stack_trace_map_ops = {
+const struct bpf_map_ops stack_map_ops = {
 	.map_alloc = stack_map_alloc,
 	.map_free = stack_map_free,
 	.map_get_next_key = stack_map_get_next_key,

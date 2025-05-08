@@ -69,8 +69,6 @@
 #include <linux/mount.h>
 #include <linux/pipe_fs_i.h>
 
-#include "../lib/kstrtox.h"
-
 #include <linux/uaccess.h>
 #include <asm/processor.h>
 
@@ -135,7 +133,6 @@ static int __maybe_unused one = 1;
 static int __maybe_unused two = 2;
 static int __maybe_unused three = 3;
 static int __maybe_unused four = 4;
-static int int_max = INT_MAX;
 static unsigned long zero_ul;
 static unsigned long one_ul = 1;
 static unsigned long long_max = LONG_MAX;
@@ -256,9 +253,6 @@ static int proc_dostring_coredump(struct ctl_table *table, int write,
 #endif
 static int proc_dopipe_max_size(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
-static int proc_dointvec_minmax_bpf_stats(struct ctl_table *table, int write,
-					  void __user *buffer, size_t *lenp,
-					  loff_t *ppos);
 #ifdef CONFIG_SCHED_WALT
 static int proc_douintvec_minmax_schedhyst(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
@@ -284,36 +278,6 @@ static int sysrq_sysctl_handler(struct ctl_table *table, int write,
 	return 0;
 }
 
-#endif
-
-#ifdef CONFIG_BPF_SYSCALL
-
-void __weak unpriv_ebpf_notify(int new_state)
-{
-}
-
-static int bpf_unpriv_handler(struct ctl_table *table, int write,
-                             void *buffer, size_t *lenp, loff_t *ppos)
-{
-	int ret, unpriv_enable = *(int *)table->data;
-	bool locked_state = unpriv_enable == 1;
-	struct ctl_table tmp = *table;
-
-	if (write && !capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	tmp.data = &unpriv_enable;
-	ret = proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
-	if (write && !ret) {
-		if (locked_state && unpriv_enable != 1)
-			return -EPERM;
-		*(int *)table->data = unpriv_enable;
-	}
-
-	unpriv_ebpf_notify(unpriv_enable);
-
-	return ret;
-}
 #endif
 
 static struct ctl_table kern_table[];
@@ -623,24 +587,15 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &max_cfs_boost_prio,
 	},
 	{
-		.procname	= "walt_low_latency_task_threshold",
-		.data		= &sysctl_walt_low_latency_task_threshold,
+		.procname	= "walt_low_latency_task_boost",
+		.data		= &sysctl_walt_low_latency_task_boost,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler   = proc_dointvec_minmax,
 		.extra1		= &zero,
-		.extra2		= &one_thousand,
-	},
-#endif
-	{
-		.procname	= "sched_force_lb_enable",
-		.data		= &sysctl_sched_force_lb_enable,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &zero,
 		.extra2		= &one,
 	},
+#endif
 #ifdef CONFIG_SCHED_DEBUG
 	{
 		.procname       = "sched_cstate_aware",
@@ -766,8 +721,6 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= sched_rt_handler,
-		.extra1		= &one,
-		.extra2		= &int_max,
 	},
 	{
 		.procname	= "sched_rt_runtime_us",
@@ -775,8 +728,6 @@ static struct ctl_table kern_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= sched_rt_handler,
-		.extra1		= &neg_one,
-		.extra2		= &int_max,
 	},
 	{
 		.procname	= "sched_rr_timeslice_ms",
@@ -1609,20 +1560,12 @@ static struct ctl_table kern_table[] = {
 		.data		= &sysctl_unprivileged_bpf_disabled,
 		.maxlen		= sizeof(sysctl_unprivileged_bpf_disabled),
 		.mode		= 0644,
-		.proc_handler	= bpf_unpriv_handler,
-		.extra1		= &zero,
-		.extra2		= &two,
-	},
-#endif
-	{
-		.procname	= "bpf_stats_enabled",
-		.data		= &sysctl_bpf_stats_enabled,
-		.maxlen		= sizeof(sysctl_bpf_stats_enabled),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax_bpf_stats,
-		.extra1		= &zero,
+		/* only handle a transition from default "0" to "1" */
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &one,
 		.extra2		= &one,
 	},
+#endif
 #if defined(CONFIG_TREE_RCU) || defined(CONFIG_PREEMPT_RCU)
 	{
 		.procname	= "panic_on_rcu_stall",
@@ -2555,14 +2498,13 @@ int proc_dostring(struct ctl_table *table, int write,
 			       (char __user *)buffer, lenp, ppos);
 }
 
-static void proc_skip_spaces(char **buf, size_t *size)
+static size_t proc_skip_spaces(char **buf)
 {
-	while (*size) {
-		if (!isspace(**buf))
-			break;
-		(*size)--;
-		(*buf)++;
-	}
+	size_t ret;
+	char *tmp = skip_spaces(*buf);
+	ret = tmp - *buf;
+	*buf = tmp;
+	return ret;
 }
 
 static void proc_skip_char(char **buf, size_t *size, const char v)
@@ -2573,41 +2515,6 @@ static void proc_skip_char(char **buf, size_t *size, const char v)
 		(*size)--;
 		(*buf)++;
 	}
-}
-
-/**
- * strtoul_lenient - parse an ASCII formatted integer from a buffer and only
- *                   fail on overflow
- *
- * @cp: kernel buffer containing the string to parse
- * @endp: pointer to store the trailing characters
- * @base: the base to use
- * @res: where the parsed integer will be stored
- *
- * In case of success 0 is returned and @res will contain the parsed integer,
- * @endp will hold any trailing characters.
- * This function will fail the parse on overflow. If there wasn't an overflow
- * the function will defer the decision what characters count as invalid to the
- * caller.
- */
-static int strtoul_lenient(const char *cp, char **endp, unsigned int base,
-			   unsigned long *res)
-{
-	unsigned long long result;
-	unsigned int rv;
-
-	cp = _parse_integer_fixup_radix(cp, &base);
-	rv = _parse_integer(cp, base, &result);
-	if ((rv & KSTRTOX_OVERFLOW) || (result != (unsigned long)result))
-		return -ERANGE;
-
-	cp += rv;
-
-	if (endp)
-		*endp = (char *)cp;
-
-	*res = (unsigned long)result;
-	return 0;
 }
 
 #define TMPBUFLEN 22
@@ -2631,12 +2538,13 @@ static int proc_get_long(char **buf, size_t *size,
 			  unsigned long *val, bool *neg,
 			  const char *perm_tr, unsigned perm_tr_len, char *tr)
 {
+	int len;
 	char *p, tmp[TMPBUFLEN];
-	ssize_t len = *size;
 
-	if (len <= 0)
+	if (!*size)
 		return -EINVAL;
 
+	len = *size;
 	if (len > TMPBUFLEN - 1)
 		len = TMPBUFLEN - 1;
 
@@ -2652,8 +2560,7 @@ static int proc_get_long(char **buf, size_t *size,
 	if (!isdigit(*p))
 		return -EINVAL;
 
-	if (strtoul_lenient(p, &p, 0, val))
-		return -EINVAL;
+	*val = simple_strtoul(p, &p, 0);
 
 	len = p - tmp;
 
@@ -2799,7 +2706,7 @@ static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
 		bool neg;
 
 		if (write) {
-			proc_skip_spaces(&p, &left);
+			left -= proc_skip_spaces(&p);
 
 			if (!left)
 				break;
@@ -2830,7 +2737,7 @@ static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
 	if (!write && !first && left && !err)
 		err = proc_put_char(&buffer, &left, '\n');
 	if (write && !err && left)
-		proc_skip_spaces(&p, &left);
+		left -= proc_skip_spaces(&p);
 	if (write) {
 		kfree(kbuf);
 		if (first)
@@ -2879,7 +2786,7 @@ static int do_proc_douintvec_w(unsigned int *tbl_data,
 	if (IS_ERR(kbuf))
 		return -EINVAL;
 
-	proc_skip_spaces(&p, &left);
+	left -= proc_skip_spaces(&p);
 	if (!left) {
 		err = -EINVAL;
 		goto out_free;
@@ -2899,7 +2806,7 @@ static int do_proc_douintvec_w(unsigned int *tbl_data,
 	}
 
 	if (!err && left)
-		proc_skip_spaces(&p, &left);
+		left -= proc_skip_spaces(&p);
 
 out_free:
 	kfree(kbuf);
@@ -3333,7 +3240,7 @@ static int __do_proc_doulongvec_minmax(void *data, struct ctl_table *table, int 
 		if (write) {
 			bool neg;
 
-			proc_skip_spaces(&p, &left);
+			left -= proc_skip_spaces(&p);
 			if (!left)
 				break;
 
@@ -3366,7 +3273,7 @@ static int __do_proc_doulongvec_minmax(void *data, struct ctl_table *table, int 
 	if (!write && !first && left && !err)
 		err = proc_put_char(&buffer, &left, '\n');
 	if (write && !err)
-		proc_skip_spaces(&p, &left);
+		left -= proc_skip_spaces(&p);
 	if (write) {
 		kfree(kbuf);
 		if (first)
@@ -3872,28 +3779,6 @@ int proc_douintvec_ravg_window(struct ctl_table *table, int write,
 }
 
 #endif /* CONFIG_PROC_SYSCTL */
-
-static int proc_dointvec_minmax_bpf_stats(struct ctl_table *table, int write,
-					  void __user *buffer, size_t *lenp,
-					  loff_t *ppos)
-{
-	int ret, bpf_stats = *(int *)table->data;
-	struct ctl_table tmp = *table;
-
-	if (write && !capable(CAP_SYS_ADMIN))
-		return -EPERM;
-
-	tmp.data = &bpf_stats;
-	ret = proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
-	if (write && !ret) {
-		*(int *)table->data = bpf_stats;
-		if (bpf_stats)
-			static_branch_enable(&bpf_stats_enabled_key);
-		else
-			static_branch_disable(&bpf_stats_enabled_key);
-	}
-	return ret;
-}
 
 /*
  * No sense putting this after each symbol definition, twice,

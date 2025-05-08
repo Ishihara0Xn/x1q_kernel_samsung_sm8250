@@ -171,17 +171,15 @@ void print_bpf_insn(const struct bpf_insn_cbs *cbs,
 		else
 			verbose(cbs->private_data, "BUG_%02x\n", insn->code);
 	} else if (class == BPF_ST) {
-		if (BPF_MODE(insn->code) == BPF_MEM) {
-			verbose(cbs->private_data, "(%02x) *(%s *)(r%d %+d) = %d\n",
-				insn->code,
-				bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
-				insn->dst_reg,
-				insn->off, insn->imm);
-		} else if (BPF_MODE(insn->code) == 0xc0 /* BPF_NOSPEC, no UAPI */) {
-			verbose(cbs->private_data, "(%02x) nospec\n", insn->code);
-		} else {
+		if (BPF_MODE(insn->code) != BPF_MEM) {
 			verbose(cbs->private_data, "BUG_st_%02x\n", insn->code);
+			return;
 		}
+		verbose(cbs->private_data, "(%02x) *(%s *)(r%d %+d) = %d\n",
+			insn->code,
+			bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
+			insn->dst_reg,
+			insn->off, insn->imm);
 	} else if (class == BPF_LDX) {
 		if (BPF_MODE(insn->code) != BPF_MEM) {
 			verbose(cbs->private_data, "BUG_ldx_%02x\n", insn->code);
@@ -208,11 +206,10 @@ void print_bpf_insn(const struct bpf_insn_cbs *cbs,
 			 * part of the ldimm64 insn is accessible.
 			 */
 			u64 imm = ((u64)(insn + 1)->imm << 32) | (u32)insn->imm;
-			bool is_ptr = insn->src_reg == BPF_PSEUDO_MAP_FD ||
-				      insn->src_reg == BPF_PSEUDO_MAP_VALUE;
+			bool map_ptr = insn->src_reg == BPF_PSEUDO_MAP_FD;
 			char tmp[64];
 
-			if (is_ptr && !allow_ptr_leaks)
+			if (map_ptr && !allow_ptr_leaks)
 				imm = 0;
 
 			verbose(cbs->private_data, "(%02x) r%d = %s\n",
