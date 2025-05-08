@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -776,47 +775,6 @@ struct sde_connector_dyn_hdr_metadata *sde_connector_get_dyn_hdr_meta(
 	return &c_state->dyn_hdr_meta;
 }
 
-static bool sde_connector_is_fod_enabled(struct sde_connector *c_conn)
-{
-	struct drm_connector *connector = &c_conn->base;
-
-	if (!connector->state || !connector->state->crtc)
-		return false;
-
-	return sde_crtc_is_fod_enabled(connector->state->crtc->state);
-}
-
-struct dsi_panel *sde_connector_panel(struct sde_connector *c_conn)
-{
-	struct dsi_display *display = (struct dsi_display *)c_conn->display;
-
-	return display ? display->panel : NULL;
-}
-
-static void sde_connector_pre_update_fod_hbm(struct sde_connector *c_conn)
-{
-	struct dsi_panel *panel;
-	bool status;
-
-	panel = sde_connector_panel(c_conn);
-	if (!panel)
-		return;
-
-	status = sde_connector_is_fod_enabled(c_conn);
-	if (status == dsi_panel_get_fod_ui(panel))
-		return;
-
-	if (status)
-		sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
-
-	dsi_panel_set_fod_hbm(panel, status);
-
-	if (!status)
-		sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
-
-	dsi_panel_set_fod_ui(panel, status);
-}
-
 int sde_connector_pre_kickoff(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
@@ -826,6 +784,7 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	int rc;
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 	struct samsung_display_driver_data *vdd;
+	u32 finger_mask_state;
 #endif
 
 	if (!connector) {
@@ -869,13 +828,13 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
 		/* SAMSUNG_FINGERPRINT */
 		vdd = display->panel->panel_private;
-		if (vdd->support_optical_fingerprint)
-			sde_connector_pre_update_fod_hbm(c_conn);
+		finger_mask_state = sde_connector_get_property(c_conn->base.state,
+				CONNECTOR_PROP_FINGERPRINT_MASK);
 		vdd->finger_mask_updated = false;
-		if (vdd->finger_mask_enable != vdd->finger_mask) {
-			SDE_ERROR("[FINGER MASK]updated finger mask mode %d\n", vdd->finger_mask_enable);
+		if (finger_mask_state != vdd->finger_mask) {
+			SDE_ERROR("[FINGER MASK]updated finger mask mode %d\n", finger_mask_state);
 			vdd->finger_mask_updated = true;
-			vdd->finger_mask = vdd->finger_mask_enable;
+			vdd->finger_mask = finger_mask_state;
 		}
 	}
 #endif
@@ -2215,6 +2174,8 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 		struct drm_connector_state *new_conn_state)
 {
 	struct sde_connector *c_conn;
+	struct sde_connector_state *c_state;
+	bool qsync_dirty = false, has_modeset = false;
 
 	if (!connector) {
 		SDE_ERROR("invalid connector\n");
@@ -2227,6 +2188,20 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 	}
 
 	c_conn = to_sde_connector(connector);
+	c_state = to_sde_connector_state(new_conn_state);
+
+	has_modeset = sde_crtc_atomic_check_has_modeset(new_conn_state->state,
+						new_conn_state->crtc);
+	qsync_dirty = msm_property_is_dirty(&c_conn->property_info,
+					&c_state->property_state,
+					CONNECTOR_PROP_QSYNC_MODE);
+
+	SDE_DEBUG("has_modeset %d qsync_dirty %d\n", has_modeset, qsync_dirty);
+	SDE_EVT32(connector->base.id, has_modeset, has_modeset);
+	if (has_modeset && qsync_dirty) {
+		SDE_ERROR("invalid qsync update during modeset\n");
+		return -EINVAL;
+	}
 
 	if (c_conn->ops.atomic_check)
 		return c_conn->ops.atomic_check(connector,
@@ -2474,7 +2449,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 		return -EINVAL;
 	}
 
-	info = vzalloc(sizeof(*info));
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
@@ -2532,7 +2507,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 			SDE_KMS_INFO_DATALEN(info),
 			prop_id);
 exit:
-	vfree(info);
+	kfree(info);
 
 	return rc;
 }
@@ -2637,6 +2612,13 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 	msm_property_install_range(&c_conn->property_info, "bl_scale",
 		0x0, 0, MAX_BL_SCALE_LEVEL, MAX_BL_SCALE_LEVEL,
 		CONNECTOR_PROP_BL_SCALE);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+		/* SAMSUNG_FINGERPRINT */
+	msm_property_install_range(&c_conn->property_info, "fingerprint_mask",
+		0x0, 0, 100, 0,
+		CONNECTOR_PROP_FINGERPRINT_MASK);
+#endif
 
 	msm_property_install_range(&c_conn->property_info, "sv_bl_scale",
 		0x0, 0, MAX_SV_BL_SCALE_LEVEL, MAX_SV_BL_SCALE_LEVEL,

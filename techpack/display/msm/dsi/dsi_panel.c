@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -12,7 +11,6 @@
 #include <video/mipi_display.h>
 
 #include "dsi_panel.h"
-#include "dsi_display.h"
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 #include "sde_dbg.h"
@@ -54,7 +52,7 @@ static u32 dsi_dsc_rc_buf_thresh[] = {0x0e, 0x1c, 0x2a, 0x38, 0x46, 0x54,
  * Rate control - Min QP values for each ratio type in dsi_dsc_ratio_type
  */
 static char dsi_dsc_rc_range_min_qp_1_1[][15] = {
-	{0, 0, 1, 1, 3, 3, 3, 3, 3, 3, 5, 5, 5, 7, 13},
+	{0, 0, 1, 1, 3, 3, 3, 3, 3, 3, 5, 5, 5, 7, 12},
 	{0, 4, 5, 5, 7, 7, 7, 7, 7, 7, 9, 9, 9, 11, 17},
 	{0, 4, 9, 9, 11, 11, 11, 11, 11, 11, 13, 13, 13, 15, 21},
 	{0, 4, 5, 6, 7, 7, 7, 7, 7, 7, 9, 9, 9, 11, 15},
@@ -578,9 +576,9 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
 #if defined(CONFIG_DISPLAY_SAMSUNG)
-	if (vdd->dtsi_data.samsung_dsi_off_reset_delay)
-		usleep_range(vdd->dtsi_data.samsung_dsi_off_reset_delay,
-				vdd->dtsi_data.samsung_dsi_off_reset_delay);
+    if (vdd->dtsi_data.samsung_dsi_off_reset_delay)
+        usleep_range(vdd->dtsi_data.samsung_dsi_off_reset_delay,
+                vdd->dtsi_data.samsung_dsi_off_reset_delay);
 
 	/*
 		AOT disable on factory binary.
@@ -863,30 +861,11 @@ static int dsi_panel_wled_register(struct dsi_panel *panel,
 	return 0;
 }
 
-#ifndef CONFIG_DISPLAY_SAMSUNG
-static int dsi_panel_dcs_set_display_brightness_c2(struct mipi_dsi_device *dsi,
-			u32 bl_lvl)
-{
-	u16 brightness = (u16)bl_lvl;
-	u8 first_byte = brightness & 0xff;
-	u8 second_byte = brightness >> 8;
-	u8 payload[8] = {second_byte, first_byte,
-		second_byte, first_byte,
-		second_byte, first_byte,
-		second_byte, first_byte};
-
-	return mipi_dsi_dcs_write(dsi, 0xC2, payload, sizeof(payload));
-}
-#endif
-
-
-
 static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	u32 bl_lvl)
 {
 	int rc = 0;
 	struct mipi_dsi_device *dsi;
-	struct dsi_backlight_config *bl;
 
 	if (!panel || (bl_lvl > 0xffff)) {
 		DSI_ERR("invalid params\n");
@@ -894,7 +873,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	}
 
 	dsi = &panel->mipi_device;
-	bl = &panel->bl_config;
 
 	if (panel->bl_config.bl_inverted_dbv)
 		bl_lvl = (((bl_lvl & 0xff) << 8) | (bl_lvl >> 8));
@@ -904,11 +882,7 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	if (rc < 0)
 		LCD_ERR("failed to update dcs backlight:%d\n", bl_lvl);
 #else
-	if (panel->bl_config.bl_dcs_subtype == 0xc2)
-		rc = dsi_panel_dcs_set_display_brightness_c2(dsi, bl_lvl);
-	else
-		rc = mipi_dsi_dcs	_set_display_brightness(dsi, bl_lvl);
-
+	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 	if (rc < 0)
 		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
 #endif
@@ -967,59 +941,6 @@ error:
 	return rc;
 }
 
-static u32 interpolate(uint32_t x, uint32_t xa, uint32_t xb,
-		       uint32_t ya, uint32_t yb)
-{
-	return ya - (ya - yb) * (x - xa) / (xb - xa);
-}
-
-bool dsi_panel_get_fod_ui(struct dsi_panel *panel)
-{
-	return panel->fod_ui;
-}
-
-void dsi_panel_set_fod_ui(struct dsi_panel *panel, bool status)
-{
-	panel->fod_ui = status;
-
-	sysfs_notify(&panel->parent->kobj, NULL, "fod_ui");
-}
-
-static u32 dsi_panel_calc_fod_dim_alpha(struct dsi_panel *panel, u32 bl_level)
-{
-	int i;
-
-	if (!panel->fod_dim_lut)
-		return 0;
-
-	for (i = 0; i < panel->fod_dim_lut_len; i++)
-		if (panel->fod_dim_lut[i].brightness >= bl_level)
-			break;
-
-	if (i == 0)
-		return panel->fod_dim_lut[i].alpha;
-
-	if (i == panel->fod_dim_lut_len)
-		return panel->fod_dim_lut[i - 1].alpha;
-
-	return interpolate(bl_level,
-			   panel->fod_dim_lut[i - 1].brightness,
-			   panel->fod_dim_lut[i].brightness,
-			   panel->fod_dim_lut[i - 1].alpha,
-			   panel->fod_dim_lut[i].alpha);
-}
-
-u8 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel)
-{
-	u8 alpha;
-
-	mutex_lock(&panel->panel_lock);
-	alpha = panel->fod_dim_alpha;
-	mutex_unlock(&panel->panel_lock);
-
-	return alpha;
-}
-
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
@@ -1045,10 +966,6 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		DSI_ERR("Backlight type(%d) not supported\n", bl->type);
 		rc = -ENOTSUPP;
 	}
-
-	bl->real_bl_level = bl_lvl;
-
-	panel->fod_dim_alpha = dsi_panel_calc_fod_dim_alpha(panel, bl_lvl);
 
 	return rc;
 }
@@ -1632,15 +1549,8 @@ static int dsi_panel_parse_qsync_caps(struct dsi_panel *panel,
 				     struct device_node *of_node)
 {
 	int rc = 0;
-	u32 val = 0, i;
-	struct dsi_qsync_capabilities *qsync_caps = &panel->qsync_caps;
-	struct dsi_parser_utils *utils = &panel->utils;
-	const char *name = panel->name;
+	u32 val = 0;
 
-	/**
-	 * "mdss-dsi-qsync-min-refresh-rate" is defined in cmd mode and
-	 *  video mode when there is only one qsync min fps present.
-	 */
 	rc = of_property_read_u32(of_node,
 				  "qcom,mdss-dsi-qsync-min-refresh-rate",
 				  &val);
@@ -1648,75 +1558,8 @@ static int dsi_panel_parse_qsync_caps(struct dsi_panel *panel,
 		DSI_DEBUG("[%s] qsync min fps not defined rc:%d\n",
 			panel->name, rc);
 
-	qsync_caps->qsync_min_fps = val;
+	panel->qsync_min_fps = val;
 
-	/**
-	 * "dsi-supported-qsync-min-fps-list" may be defined in video
-	 *  mode, only in dfps case when "qcom,dsi-supported-dfps-list"
-	 *  is defined.
-	 */
-	qsync_caps->qsync_min_fps_list_len = utils->count_u32_elems(utils->data,
-				  "qcom,dsi-supported-qsync-min-fps-list");
-	if (qsync_caps->qsync_min_fps_list_len < 1)
-		goto qsync_support;
-
-	/**
-	 * qcom,dsi-supported-qsync-min-fps-list cannot be defined
-	 *  along with qcom,mdss-dsi-qsync-min-refresh-rate.
-	 */
-	if (qsync_caps->qsync_min_fps_list_len >= 1 &&
-		qsync_caps->qsync_min_fps) {
-		DSI_ERR("[%s] Both qsync nodes are defined\n",
-				name);
-		rc = -EINVAL;
-		goto error;
-	}
-
-	if (panel->dfps_caps.dfps_list_len !=
-			qsync_caps->qsync_min_fps_list_len) {
-		DSI_ERR("[%s] Qsync min fps list mismatch with dfps\n", name);
-		rc = -EINVAL;
-		goto error;
-	}
-
-	qsync_caps->qsync_min_fps_list =
-		kcalloc(qsync_caps->qsync_min_fps_list_len, sizeof(u32),
-			GFP_KERNEL);
-	if (!qsync_caps->qsync_min_fps_list) {
-		rc = -ENOMEM;
-		goto error;
-	}
-
-	rc = utils->read_u32_array(utils->data,
-			"qcom,dsi-supported-qsync-min-fps-list",
-			qsync_caps->qsync_min_fps_list,
-			qsync_caps->qsync_min_fps_list_len);
-	if (rc) {
-		DSI_ERR("[%s] Qsync min fps list parse failed\n", name);
-		rc = -EINVAL;
-		goto error;
-	}
-
-	qsync_caps->qsync_min_fps = qsync_caps->qsync_min_fps_list[0];
-
-	for (i = 1; i < qsync_caps->qsync_min_fps_list_len; i++) {
-		if (qsync_caps->qsync_min_fps_list[i] <
-				qsync_caps->qsync_min_fps)
-			qsync_caps->qsync_min_fps =
-				qsync_caps->qsync_min_fps_list[i];
-	}
-
-qsync_support:
-	/* allow qsync support only if DFPS is with VFP approach */
-	if ((panel->dfps_caps.dfps_support) &&
-	    !(panel->dfps_caps.type == DSI_DFPS_IMMEDIATE_VFP))
-		panel->qsync_caps.qsync_min_fps = 0;
-
-error:
-	if (rc < 0) {
-		qsync_caps->qsync_min_fps = 0;
-		qsync_caps->qsync_min_fps_list_len = 0;
-	}
 	return rc;
 }
 
@@ -2617,7 +2460,7 @@ static int dsi_panel_create_cmd_packets(const char *data,
 		cmd[i].msg.type = data[0];
 		cmd[i].last_command = (data[1] == 1);
 		cmd[i].msg.channel = data[2];
-		cmd[i].msg.flags |= data[3];
+		cmd[i].msg.flags |= (data[3] == 1 ? MIPI_DSI_MSG_REQ_ACK : 0);
 		cmd[i].msg.ctrl = 0;
 		cmd[i].post_wait_ms = cmd[i].msg.wait_ms = data[4];
 		cmd[i].msg.tx_len = ((data[5] << 8) | (data[6]));
@@ -3184,79 +3027,6 @@ error:
 	return rc;
 }
 
-static int dsi_panel_parse_fod_dim_lut(struct dsi_panel *panel,
-		struct dsi_parser_utils *utils)
-{
-	const char *prop_name = "samsung,fod-dim-lut";
-	unsigned int i;
-	u32 *array;
-	int count;
-	int rc;
-
-	count = utils->count_u32_elems(utils->data, prop_name);
-	if (count <= 0 || count % BRIGHTNESS_ALPHA_PAIR_LEN) {
-		DSI_ERR("[%s] invalid number of elements %d\n",
-			panel->name, count);
-		rc = -EINVAL;
-		goto count_fail;
-	}
-
-	array = kcalloc(count, sizeof(u32), GFP_KERNEL);
-	if (!array) {
-		rc = -ENOMEM;
-		goto alloc_array_fail;
-	}
-
-	rc = utils->read_u32_array(utils->data, prop_name, array, count);
-	if (rc) {
-		DSI_ERR("[%s] failed to read array, rc=%d\n", panel->name, rc);
-		goto read_fail;
-	}
-
-	count /= BRIGHTNESS_ALPHA_PAIR_LEN;
-	panel->fod_dim_lut = kcalloc(count, sizeof(*panel->fod_dim_lut),
-				     GFP_KERNEL);
-	if (!panel->fod_dim_lut) {
-		rc = -ENOMEM;
-		goto alloc_lut_fail;
-	}
-
-	panel->fod_dim_lut_len = count;
-
-	for (i = 0; i < count; i++) {
-		struct brightness_alpha_pair *pair = &panel->fod_dim_lut[i];
-		pair->brightness = array[i * BRIGHTNESS_ALPHA_PAIR_LEN + 0];
-		pair->alpha = array[i * BRIGHTNESS_ALPHA_PAIR_LEN + 1];
-	}
-
-alloc_lut_fail:
-read_fail:
-	kfree(array);
-alloc_array_fail:
-count_fail:
-
-	return rc;
-}
-
-int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
-{
-	struct dsi_display *display = get_main_display();
-	struct samsung_display_driver_data *vdd = (struct samsung_display_driver_data *)display->panel->panel_private;
-
-	if (status){
-		if (vdd->br_info.common_br.bl_level > 255)
-			vdd->br_info.common_br.finger_mask_bl_level = vdd->br_info.common_br.bl_level;
-		else
-			vdd->br_info.common_br.finger_mask_bl_level = 319;
-	}
-	else
-		vdd->br_info.common_br.finger_mask_bl_level = 0;
-
-	vdd->finger_mask_enable = status;
-
-	return 0;
-}
-
 static int dsi_panel_parse_bl_pwm_config(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -3320,7 +3090,6 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	panel->bl_config.bl_scale = MAX_BL_SCALE_LEVEL;
 	panel->bl_config.bl_scale_sv = MAX_SV_BL_SCALE_LEVEL;
-	panel->bl_config.real_bl_level = 0;
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-min-level", &val);
 	if (rc) {
@@ -3362,22 +3131,8 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 		panel->bl_config.brightness_max_level = val;
 	}
 
-	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bl-ctrl-dcs-subtype",
-		&val);
-	if (rc) {
-		DSI_DEBUG("[%s] bl-ctrl-dcs-subtype, defautling to zero\n",
-			panel->name);
-		panel->bl_config.bl_dcs_subtype = 0;
-	} else {
-		panel->bl_config.bl_dcs_subtype = val;
-	}
-
 	panel->bl_config.bl_inverted_dbv = utils->read_bool(utils->data,
 		"qcom,mdss-dsi-bl-inverted-dbv");
-
-    rc = dsi_panel_parse_fod_dim_lut(panel, utils);
-	if (rc)
-		DSI_ERR("[%s] failed to parse fod dim lut\n", panel->name);
 
 	if (panel->bl_config.type == DSI_BACKLIGHT_PWM) {
 		rc = dsi_panel_parse_bl_pwm_config(panel);
@@ -4344,47 +4099,6 @@ end:
 #endif
 }
 
-static ssize_t sysfs_fod_ui_read(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct dsi_display *display = dev_get_drvdata(dev);
-	struct dsi_panel *panel = display->panel;
-	bool status;
-
-	mutex_lock(&panel->panel_lock);
-	status = panel->fod_ui;
-	mutex_unlock(&panel->panel_lock);
-
-	return snprintf(buf, PAGE_SIZE, "%u\n", status);
-}
-
-static DEVICE_ATTR(fod_ui, 0444, sysfs_fod_ui_read, NULL);
-
-static struct attribute *panel_attrs[] = {
-	&dev_attr_fod_ui.attr,
-	NULL,
-};
-
-static struct attribute_group panel_attrs_group = {
-	.attrs = panel_attrs,
-};
-
-static int dsi_panel_sysfs_init(struct dsi_panel *panel)
-{
-	int rc = 0;
-
-	rc = sysfs_create_group(&panel->parent->kobj, &panel_attrs_group);
-	if (rc)
-		DSI_ERR("failed to create panel sysfs attributes\n");
-
-	return rc;
-}
-
-static void dsi_panel_sysfs_deinit(struct dsi_panel *panel)
-{
-	sysfs_remove_group(&panel->parent->kobj, &panel_attrs_group);
-}
-
 struct dsi_panel *dsi_panel_get(struct device *parent,
 				struct device_node *of_node,
 				struct device_node *parser_node,
@@ -4451,6 +4165,11 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		DSI_DEBUG("failed to parse qsync features, rc=%d\n", rc);
 
+	/* allow qsync support only if DFPS is with VFP approach */
+	if ((panel->dfps_caps.dfps_support) &&
+	    !(panel->dfps_caps.type == DSI_DFPS_IMMEDIATE_VFP))
+		panel->qsync_min_fps = 0;
+
 	rc = dsi_panel_parse_dyn_clk_caps(panel);
 	if (rc)
 		DSI_ERR("failed to parse dynamic clk config, rc=%d\n", rc);
@@ -4510,10 +4229,6 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		goto error;
 
-	rc = dsi_panel_sysfs_init(panel);
-	if (rc)
-		goto error;
-
 	mutex_init(&panel->panel_lock);
 
 	return panel;
@@ -4524,8 +4239,6 @@ error:
 
 void dsi_panel_put(struct dsi_panel *panel)
 {
-	dsi_panel_sysfs_deinit(panel);
-
 	drm_panel_remove(&panel->drm_panel);
 
 	/* free resources allocated for ESD check */
