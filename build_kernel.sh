@@ -14,7 +14,7 @@ git clone https://gitlab.com/LeCmnGend/clang.git -b clang-18 --depth=1 $(pwd)/pr
 
 # change DEFCONFIG to you are defconfig name or device codename
 
-DEFCONFIG="vendor/samsung/x1q_defconfig"
+DEFCONFIG="vendor/x1q_kor_singlex_defconfig"
 
 # you can set you name or host name(optional)
 
