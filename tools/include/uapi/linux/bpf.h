@@ -129,14 +129,6 @@ enum bpf_map_type {
 	BPF_MAP_TYPE_REUSEPORT_SOCKARRAY,
 };
 
-/* Note that tracing related programs such as
- * BPF_PROG_TYPE_{KPROBE,TRACEPOINT,PERF_EVENT,RAW_TRACEPOINT}
- * are not subject to a stable API since kernel internal data
- * structures can change from release to release and may
- * therefore break existing tracing BPF programs. Tracing BPF
- * programs correspond to /a/ specific kernel which is to be
- * analyzed, and not /a/ specific kernel /and/ all future ones.
- */
 enum bpf_prog_type {
 	BPF_PROG_TYPE_UNSPEC,
 	BPF_PROG_TYPE_SOCKET_FILTER,
@@ -234,20 +226,6 @@ enum bpf_attach_type {
  */
 #define BPF_F_STRICT_ALIGNMENT	(1U << 0)
 
-/* If BPF_F_ANY_ALIGNMENT is used in BPF_PROF_LOAD command, the
- * verifier will allow any alignment whatsoever.  On platforms
- * with strict alignment requirements for loads ands stores (such
- * as sparc and mips) the verifier validates that all loads and
- * stores provably follow this requirement.  This flag turns that
- * checking and enforcement off.
- *
- * It is mostly used for testing when we want to validate the
- * context and memory access aspects of the verifier, but because
- * of an unaligned access the alignment check would trigger before
- * the one we are interested in.
- */
-#define BPF_F_ANY_ALIGNMENT	(1U << 1)
-
 /* when bpf_ldimm64->src_reg == BPF_PSEUDO_MAP_FD, bpf_ldimm64->imm == fd */
 #define BPF_PSEUDO_MAP_FD	1
 
@@ -342,7 +320,7 @@ union bpf_attr {
 		__u32		log_level;	/* verbosity level of verifier */
 		__u32		log_size;	/* size of user buffer */
 		__aligned_u64	log_buf;	/* user supplied buffer */
-		__u32		kern_version;	/* not used */
+		__u32		kern_version;	/* checked when prog_type=kprobe */
 		__u32		prog_flags;
 		char		prog_name[BPF_OBJ_NAME_LEN];
 		__u32		prog_ifindex;	/* ifindex of netdev to prep for */
@@ -491,8 +469,6 @@ union bpf_attr {
  * u64 bpf_ktime_get_ns(void)
  * 	Description
  * 		Return the time elapsed since system boot, in nanoseconds.
- * 		Does not include time the system was suspended.
- * 		See: clock_gettime(CLOCK_MONOTONIC)
  * 	Return
  * 		Current *ktime*.
  *
@@ -701,9 +677,7 @@ union bpf_attr {
  * 		performed again, if the helper is used in combination with
  * 		direct packet access.
  * 	Return
- * 		0 on success, or a negative error in case of failure. Positive
- * 		error indicates a potential drop or congestion in the target
- * 		device. The particular positive error codes are not defined.
+ * 		0 on success, or a negative error in case of failure.
  *
  * u64 bpf_get_current_pid_tgid(void)
  * 	Return
@@ -1217,8 +1191,8 @@ union bpf_attr {
  * 	Return
  * 		The return value depends on the result of the test, and can be:
  *
- *		* 1, if current task belongs to the cgroup2.
- *		* 0, if current task does not belong to the cgroup2.
+ * 		* 0, if the *skb* task belongs to the cgroup2.
+ * 		* 1, if the *skb* task does not belong to the cgroup2.
  * 		* A negative error code, if an error occurred.
  *
  * int bpf_skb_change_tail(struct sk_buff *skb, u32 len, u64 flags)
@@ -2167,93 +2141,6 @@ union bpf_attr {
  *		request in the skb.
  *	Return
  *		0 on success, or a negative error in case of failure.
- *
- * u64 bpf_ktime_get_boot_ns(void)
- * 	Description
- * 		Return the time elapsed since system boot, in nanoseconds.
- * 		Does include the time the system was suspended.
- * 		See: clock_gettime(CLOCK_BOOTTIME)
- * 	Return
- * 		Current *ktime*.
- *
- * struct bpf_sock *bpf_sk_lookup_tcp(void *ctx, struct bpf_sock_tuple *tuple, u32 tuple_size, u64 netns, u64 flags)
- *	Description
- *		Look for TCP socket matching *tuple*, optionally in a child
- *		network namespace *netns*. The return value must be checked,
- *		and if non-NULL, released via **bpf_sk_release**\ ().
- *
- *		The *ctx* should point to the context of the program, such as
- *		the skb or socket (depending on the hook in use). This is used
- *		to determine the base network namespace for the lookup.
- *
- *		*tuple_size* must be one of:
- *
- *		**sizeof**\ (*tuple*\ **->ipv4**)
- *			Look for an IPv4 socket.
- *		**sizeof**\ (*tuple*\ **->ipv6**)
- *			Look for an IPv6 socket.
- *
- *		If the *netns* is a negative signed 32-bit integer, then the
- *		socket lookup table in the netns associated with the *ctx* will
- *		will be used. For the TC hooks, this is the netns of the device
- *		in the skb. For socket hooks, this is the netns of the socket.
- *		If *netns* is any other signed 32-bit value greater than or
- *		equal to zero then it specifies the ID of the netns relative to
- *		the netns associated with the *ctx*. *netns* values beyond the
- *		range of 32-bit integers are reserved for future use.
- *
- *		All values for *flags* are reserved for future usage, and must
- *		be left at zero.
- *
- *		This helper is available only if the kernel was compiled with
- *		**CONFIG_NET** configuration option.
- *	Return
- *		Pointer to *struct bpf_sock*, or NULL in case of failure.
- *		For sockets with reuseport option, the *struct bpf_sock*
- *		result is from reuse->socks[] using the hash of the tuple.
- *
- * struct bpf_sock *bpf_sk_lookup_udp(void *ctx, struct bpf_sock_tuple *tuple, u32 tuple_size, u64 netns, u64 flags)
- *	Description
- *		Look for UDP socket matching *tuple*, optionally in a child
- *		network namespace *netns*. The return value must be checked,
- *		and if non-NULL, released via **bpf_sk_release**\ ().
- *
- *		The *ctx* should point to the context of the program, such as
- *		the skb or socket (depending on the hook in use). This is used
- *		to determine the base network namespace for the lookup.
- *
- *		*tuple_size* must be one of:
- *
- *		**sizeof**\ (*tuple*\ **->ipv4**)
- *			Look for an IPv4 socket.
- *		**sizeof**\ (*tuple*\ **->ipv6**)
- *			Look for an IPv6 socket.
- *
- *		If the *netns* is a negative signed 32-bit integer, then the
- *		socket lookup table in the netns associated with the *ctx* will
- *		will be used. For the TC hooks, this is the netns of the device
- *		in the skb. For socket hooks, this is the netns of the socket.
- *		If *netns* is any other signed 32-bit value greater than or
- *		equal to zero then it specifies the ID of the netns relative to
- *		the netns associated with the *ctx*. *netns* values beyond the
- *		range of 32-bit integers are reserved for future use.
- *
- *		All values for *flags* are reserved for future usage, and must
- *		be left at zero.
- *
- *		This helper is available only if the kernel was compiled with
- *		**CONFIG_NET** configuration option.
- *	Return
- *		Pointer to *struct bpf_sock*, or NULL in case of failure.
- *		For sockets with reuseport option, the *struct bpf_sock*
- *		result is from reuse->socks[] using the hash of the tuple.
- *
- * int bpf_sk_release(struct bpf_sock *sk)
- *	Description
- *		Release the reference held by *sock*. *sock* must be a non-NULL
- *		pointer that was returned from bpf_sk_lookup_xxx\ ().
- *	Return
- *		0 on success, or a negative error in case of failure.
  */
 #define __BPF_FUNC_MAPPER(FN)		\
 	FN(unspec),			\
@@ -2339,49 +2226,7 @@ union bpf_attr {
 	FN(get_current_cgroup_id),	\
 	FN(get_local_storage),		\
 	FN(sk_select_reuseport),	\
-	FN(skb_ancestor_cgroup_id),	\
-	FN(sk_lookup_tcp),		\
-	FN(sk_lookup_udp),		\
-	FN(sk_release),			\
-	FN(map_push_elem),		\
-	FN(map_pop_elem),		\
-	FN(map_peek_elem),		\
-	FN(msg_push_data),		\
-	FN(msg_pop_data),		\
-	FN(rc_pointer_rel),		\
-	FN(spin_lock),			\
-	FN(spin_unlock),		\
-	FN(sk_fullsock),		\
-	FN(tcp_sock),			\
-	FN(skb_ecn_set_ce),		\
-	FN(get_listener_sock),		\
-	FN(skc_lookup_tcp),		\
-	FN(tcp_check_syncookie),	\
-	FN(sysctl_get_name),		\
-	FN(sysctl_get_current_value),	\
-	FN(sysctl_get_new_value),	\
-	FN(sysctl_set_new_value),	\
-	FN(strtol),			\
-	FN(strtoul),			\
-	FN(sk_storage_get),		\
-	FN(sk_storage_delete),		\
-	FN(send_signal),		\
-	FN(tcp_gen_syncookie),		\
-	FN(skb_output),			\
-	FN(probe_read_user),		\
-	FN(probe_read_kernel),		\
-	FN(probe_read_user_str),	\
-	FN(probe_read_kernel_str),	\
-	FN(tcp_send_ack),		\
-	FN(send_signal_thread),		\
-	FN(jiffies64),			\
-	FN(read_branch_records),	\
-	FN(get_ns_current_pid_tgid),	\
-	FN(xdp_output),			\
-	FN(get_netns_cookie),		\
-	FN(get_current_ancestor_cgroup_id),	\
-	FN(sk_assign),			\
-	FN(ktime_get_boot_ns),
+	FN(skb_ancestor_cgroup_id),
 
 /* integer value in 'imm' field of BPF_CALL instruction selects which helper
  * function eBPF program intends to call
@@ -2437,9 +2282,6 @@ enum bpf_func_id {
 /* BPF_FUNC_perf_event_output for sk_buff input context. */
 #define BPF_F_CTXLEN_MASK		(0xfffffULL << 32)
 
-/* Current network namespace */
-#define BPF_F_CURRENT_NETNS		(-1L)
-
 /* Mode for BPF_FUNC_skb_adjust_room helper. */
 enum bpf_adj_room_mode {
 	BPF_ADJ_ROOM_NET,
@@ -2456,12 +2298,6 @@ enum bpf_lwt_encap_mode {
 	BPF_LWT_ENCAP_SEG6,
 	BPF_LWT_ENCAP_SEG6_INLINE
 };
-
-#define __bpf_md_ptr(type, name)	\
-union {					\
-	type name;			\
-	__u64 :64;			\
-} __attribute__((aligned(8)))
 
 /* user accessible mirror of in-kernel sk_buff.
  * new fields can only be added to the end of this structure
@@ -2497,10 +2333,6 @@ struct __sk_buff {
 	/* ... here. */
 
 	__u32 data_meta;
-	__u64 tstamp;
-	__bpf_md_ptr(struct bpf_flow_keys *, flow_keys);
-	__u32 wire_len;
-	__u32 gso_segs;
 };
 
 struct bpf_tunnel_key {
@@ -2563,23 +2395,6 @@ struct bpf_sock {
 				 */
 };
 
-struct bpf_sock_tuple {
-	union {
-		struct {
-			__be32 saddr;
-			__be32 daddr;
-			__be16 sport;
-			__be16 dport;
-		} ipv4;
-		struct {
-			__be32 saddr[4];
-			__be32 daddr[4];
-			__be16 sport;
-			__be16 dport;
-		} ipv6;
-	};
-};
-
 #define XDP_PACKET_HEADROOM 256
 
 /* User return codes for XDP prog type.
@@ -2616,8 +2431,8 @@ enum sk_action {
  * be added to the end of this structure
  */
 struct sk_msg_md {
-	__bpf_md_ptr(void *, data);
-	__bpf_md_ptr(void *, data_end);
+	void *data;
+	void *data_end;
 
 	__u32 family;
 	__u32 remote_ip4;	/* Stored in network byte order */
@@ -2633,9 +2448,8 @@ struct sk_reuseport_md {
 	 * Start of directly accessible data. It begins from
 	 * the tcp/udp header.
 	 */
-	__bpf_md_ptr(void *, data);
-	/* End of directly accessible data */
-	__bpf_md_ptr(void *, data_end);
+	void *data;
+	void *data_end;		/* End of directly accessible data */
 	/*
 	 * Total length of packet (starting from the tcp/udp header).
 	 * Note that the directly accessible bytes (data_end - data)
