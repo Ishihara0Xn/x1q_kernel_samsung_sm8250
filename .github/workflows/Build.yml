@@ -8,14 +8,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repository
+      # ✅ Checkout your source repo
       - name: Checkout kernel source
         uses: actions/checkout@v4
 
+      # ✅ Show Python version
       - name: Display Python version
         run: python --version
 
-      # Setup environment
+      # ✅ Setup environment
       - name: Setup build environment
         run: |
           sudo apt-get update && sudo apt-get install -y \
@@ -23,17 +24,17 @@ jobs:
             zip curl zlib1g-dev g++-multilib python3-networkx libxml2-utils \
             bzip2 libbz2-dev squashfs-tools pngcrush schedtool dpkg-dev \
             liblz4-tool optipng libssl-dev python-is-python3 python3-virtualenv
-          
+
           mkdir -p ~/.bin
           echo 'export PATH=$HOME/.bin:$PATH' >> ~/.bashrc
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
           chmod a+rx ~/.bin/repo
 
-      # Set script permissions
+      # ✅ Make your script executable
       - name: Make build script executable
         run: chmod +x build_kernel.sh
 
-      # Build kernel
+      # ✅ Build kernel
       - name: Build kernel
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -42,7 +43,7 @@ jobs:
           set -e
           bash -x build_kernel.sh
 
-      # Package kernel output
+      # ✅ Package the kernel
       - name: Package kernel
         id: package
         run: |
@@ -68,25 +69,33 @@ jobs:
             cp out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
           fi
 
-          echo "zip_name=${OUTPUT}.zip" >> $GITHUB_OUTPUT
-          echo "build_date=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_OUTPUT
-          echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          if [[ -n "$OUTPUT" ]]; then
+            cd AnyKernel3
+            ZIP_NAME="kernel-$(date +%Y%m%d-%H%M).zip"
+            zip -r9 "../$ZIP_NAME" ./*
+            echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
+            echo "build_date=$(date +"%Y-%m-%d %H:%M")" >> $GITHUB_OUTPUT
+            echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          else
+            echo "❌ No kernel image found to package."
+            exit 1
+          fi
 
-      # Upload as GitHub artifact
+      # ✅ Upload kernel zip to GitHub artifact
       - name: Upload kernel to artifact
         uses: actions/upload-artifact@v4
         with:
           name: output_kernel
-          path: AnyKernel3/*
+          path: ${{ steps.package.outputs.zip_name }}
 
-      # Telegram notification
+      # ✅ Upload zip to Telegram
       - name: Send kernel to Telegram
         if: success()
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHATID }}
         run: |
-          ZIP_FILE="AnyKernel3/${{ steps.package.outputs.zip_name }}"
+          ZIP_FILE="${{ steps.package.outputs.zip_name }}"
           curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendDocument" \
             -F chat_id="$CHAT_ID" \
             -F document=@"$ZIP_FILE" \
