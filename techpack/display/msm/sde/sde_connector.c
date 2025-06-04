@@ -79,7 +79,19 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 	struct drm_event event;
 	int rc = 0;
 
-	brightness = bd->props.brightness;
+#ifdef CONFIG_ONEUI7_PORTED_PANEL_FIX
+    /* 
+     * Workaround for S25 ported firmware:
+     * The panel receives extremely low brightness values from user-space.
+     * To compensate, we multiply the input by 100 before mapping it to hardware.
+     * Credits: @ExtremeXT
+     */
+    brightness = bd->props.brightness * 100;
+#else
+    /* Use standard brightness values from user-space */
+    brightness = bd->props.brightness;
+#endif
+
 
 	if ((bd->props.power != FB_BLANK_UNBLANK) ||
 			(bd->props.state & BL_CORE_FBBLANK) ||
